@@ -190,6 +190,7 @@ var terraformOnlyKeys = map[string]bool{
 	"id": true, "arn": true, "tags": true, "tags_all": true,
 	"timeouts": true, "region": true, "availability_zone": true,
 	"owner_id": true, "requester_id": true,
+	"force_destroy": true, "lifecycle": true, "depends_on": true,
 }
 
 func normalizeAttributes(resType string, attrs map[string]any) map[string]any {

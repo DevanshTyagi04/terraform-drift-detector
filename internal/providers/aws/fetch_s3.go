@@ -13,28 +13,33 @@ func fetchBuckets(ctx context.Context, client *s3.Client, region string, expecte
 	var resources []model.Resource
 	var errs []error
 
-	for _, e := range expected {
-		bucket := e.CloudID
-		// S3 bucket names don't include arn prefix
-		if len(bucket) > 5 && bucket[:5] == "arn:" {
-			// extract bucket from arn:aws:s3:::bucket-name
-			parts := splitARN(bucket)
-			if len(parts) > 0 {
-				bucket = parts[len(parts)-1]
-			}
-		}
+	listOut, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
+	if err != nil {
+		return nil, []error{fmt.Errorf("list buckets: %w", err)}
+	}
+
+	for _, b := range listOut.Buckets {
+		bucket := aws.ToString(b.Name)
 
 		locOut, err := client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 			Bucket: aws.String(bucket),
 		})
 		if err != nil {
-			errs = append(errs, fmt.Errorf("bucket %s: %w", bucket, err))
+			errs = append(errs, fmt.Errorf("bucket %s location: %w", bucket, err))
 			continue
 		}
 
 		bucketRegion := string(locOut.LocationConstraint)
 		if bucketRegion == "" {
 			bucketRegion = "us-east-1"
+		} else if bucketRegion == "EU" {
+			// S3 location constraint maps "EU" to "eu-west-1"
+			bucketRegion = "eu-west-1"
+		}
+
+		// Only scan the bucket if it is in the target region for this region's scanner loop
+		if bucketRegion != region {
+			continue
 		}
 
 		tags := map[string]string{}

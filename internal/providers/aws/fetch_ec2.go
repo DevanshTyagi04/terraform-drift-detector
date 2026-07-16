@@ -11,147 +11,149 @@ import (
 )
 
 func fetchInstances(ctx context.Context, client *ec2.Client, region string, expected []model.Resource) ([]model.Resource, []error) {
-	ids := make([]string, 0, len(expected))
-	for _, e := range expected {
-		ids = append(ids, e.CloudID)
-	}
-	if len(ids) == 0 {
-		return nil, nil
-	}
-
-	out, err := client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
-		InstanceIds: ids,
-	})
-	if err != nil {
-		return nil, []error{fmt.Errorf("describe instances: %w", err)}
-	}
-
+	paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
 	var resources []model.Resource
-	found := make(map[string]bool)
 
-	for _, res := range out.Reservations {
-		for _, inst := range res.Instances {
-			id := aws.ToString(inst.InstanceId)
-			found[id] = true
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, []error{fmt.Errorf("describe instances: %w", err)}
+		}
 
-			sgIDs := make([]string, 0, len(inst.SecurityGroups))
-			for _, sg := range inst.SecurityGroups {
-				sgIDs = append(sgIDs, aws.ToString(sg.GroupId))
+		for _, res := range page.Reservations {
+			for _, inst := range res.Instances {
+				if inst.State != nil && (inst.State.Name == ec2types.InstanceStateNameTerminated || inst.State.Name == ec2types.InstanceStateNameShuttingDown) {
+					continue
+				}
+				id := aws.ToString(inst.InstanceId)
+
+				sgIDs := make([]string, 0, len(inst.SecurityGroups))
+				for _, sg := range inst.SecurityGroups {
+					sgIDs = append(sgIDs, aws.ToString(sg.GroupId))
+				}
+				SortStringSlice(sgIDs)
+
+				tags := ec2TagMap(inst.Tags)
+				name := tags["Name"]
+				if name == "" {
+					name = id
+				}
+
+				attrs := map[string]any{
+					"instance_type":          string(inst.InstanceType),
+					"ami":                    aws.ToString(inst.ImageId),
+					"vpc_security_group_ids": sgIDs,
+					"subnet_id":              aws.ToString(inst.SubnetId),
+					"monitoring":             inst.Monitoring != nil && inst.Monitoring.State == ec2types.MonitoringStateEnabled,
+				}
+
+				resources = append(resources, baseResource("aws_instance", id, name, region, attrs, tags))
 			}
+		}
+	}
 
-			tags := ec2TagMap(inst.Tags)
+	return resources, nil
+}
+
+func fetchVPCs(ctx context.Context, client *ec2.Client, region string, expected []model.Resource) ([]model.Resource, []error) {
+	paginator := ec2.NewDescribeVpcsPaginator(client, &ec2.DescribeVpcsInput{})
+	var resources []model.Resource
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, []error{fmt.Errorf("describe vpcs: %w", err)}
+		}
+
+		for _, vpc := range page.Vpcs {
+			id := aws.ToString(vpc.VpcId)
+			tags := ec2TagMap(vpc.Tags)
 			name := tags["Name"]
 			if name == "" {
 				name = id
 			}
 
-			attrs := map[string]any{
-				"instance_type":          string(inst.InstanceType),
-				"ami":                    aws.ToString(inst.ImageId),
-				"vpc_security_group_ids": sgIDs,
-				"subnet_id":              aws.ToString(inst.SubnetId),
-				"monitoring":             inst.Monitoring != nil && inst.Monitoring.State == ec2types.MonitoringStateEnabled,
+			var enableDnsHostnames, enableDnsSupport bool
+
+			dnsHostnamesOut, err := client.DescribeVpcAttribute(ctx, &ec2.DescribeVpcAttributeInput{
+				VpcId:     vpc.VpcId,
+				Attribute: ec2types.VpcAttributeNameEnableDnsHostnames,
+			})
+			if err == nil && dnsHostnamesOut.EnableDnsHostnames != nil {
+				enableDnsHostnames = BoolValue(dnsHostnamesOut.EnableDnsHostnames.Value)
 			}
 
-			resources = append(resources, baseResource("aws_instance", id, name, region, attrs, tags))
-		}
-	}
+			dnsSupportOut, err := client.DescribeVpcAttribute(ctx, &ec2.DescribeVpcAttributeInput{
+				VpcId:     vpc.VpcId,
+				Attribute: ec2types.VpcAttributeNameEnableDnsSupport,
+			})
+			if err == nil && dnsSupportOut.EnableDnsSupport != nil {
+				enableDnsSupport = BoolValue(dnsSupportOut.EnableDnsSupport.Value)
+			}
 
-	for _, e := range expected {
-		if !found[e.CloudID] {
-			// Resource not returned — will be reported as missing by drift engine
-			continue
+			attrs := map[string]any{
+				"cidr_block":           aws.ToString(vpc.CidrBlock),
+				"enable_dns_hostnames": enableDnsHostnames,
+				"enable_dns_support":   enableDnsSupport,
+				"instance_tenancy":     string(vpc.InstanceTenancy),
+			}
+			resources = append(resources, baseResource("aws_vpc", id, name, region, attrs, tags))
 		}
-	}
-	return resources, nil
-}
-
-func fetchVPCs(ctx context.Context, client *ec2.Client, region string, expected []model.Resource) ([]model.Resource, []error) {
-	ids := make([]string, 0, len(expected))
-	for _, e := range expected {
-		ids = append(ids, e.CloudID)
-	}
-	out, err := client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
-		VpcIds: ids,
-	})
-	if err != nil {
-		return nil, []error{fmt.Errorf("describe vpcs: %w", err)}
-	}
-
-	var resources []model.Resource
-	for _, vpc := range out.Vpcs {
-		id := aws.ToString(vpc.VpcId)
-		tags := ec2TagMap(vpc.Tags)
-		name := tags["Name"]
-		if name == "" {
-			name = id
-		}
-		attrs := map[string]any{
-			"cidr_block":           aws.ToString(vpc.CidrBlock),
-			"enable_dns_hostnames": nil,
-			"enable_dns_support":   nil,
-			"instance_tenancy":     string(vpc.InstanceTenancy),
-		}
-		resources = append(resources, baseResource("aws_vpc", id, name, region, attrs, tags))
 	}
 	return resources, nil
 }
 
 func fetchSubnets(ctx context.Context, client *ec2.Client, region string, expected []model.Resource) ([]model.Resource, []error) {
-	ids := make([]string, 0, len(expected))
-	for _, e := range expected {
-		ids = append(ids, e.CloudID)
-	}
-	out, err := client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
-		SubnetIds: ids,
-	})
-	if err != nil {
-		return nil, []error{fmt.Errorf("describe subnets: %w", err)}
-	}
-
+	paginator := ec2.NewDescribeSubnetsPaginator(client, &ec2.DescribeSubnetsInput{})
 	var resources []model.Resource
-	for _, subnet := range out.Subnets {
-		id := aws.ToString(subnet.SubnetId)
-		tags := ec2TagMap(subnet.Tags)
-		name := tags["Name"]
-		if name == "" {
-			name = id
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, []error{fmt.Errorf("describe subnets: %w", err)}
 		}
-		attrs := map[string]any{
-			"cidr_block":              aws.ToString(subnet.CidrBlock),
-			"vpc_id":                    aws.ToString(subnet.VpcId),
-			"map_public_ip_on_launch":   subnet.MapPublicIpOnLaunch,
-			"availability_zone":         aws.ToString(subnet.AvailabilityZone),
+
+		for _, subnet := range page.Subnets {
+			id := aws.ToString(subnet.SubnetId)
+			tags := ec2TagMap(subnet.Tags)
+			name := tags["Name"]
+			if name == "" {
+				name = id
+			}
+			attrs := map[string]any{
+				"cidr_block":              aws.ToString(subnet.CidrBlock),
+				"vpc_id":                    aws.ToString(subnet.VpcId),
+				"map_public_ip_on_launch":   BoolValue(subnet.MapPublicIpOnLaunch),
+				"availability_zone":         aws.ToString(subnet.AvailabilityZone),
+			}
+			resources = append(resources, baseResource("aws_subnet", id, name, region, attrs, tags))
 		}
-		resources = append(resources, baseResource("aws_subnet", id, name, region, attrs, tags))
 	}
 	return resources, nil
 }
 
 func fetchSecurityGroups(ctx context.Context, client *ec2.Client, region string, expected []model.Resource) ([]model.Resource, []error) {
-	ids := make([]string, 0, len(expected))
-	for _, e := range expected {
-		ids = append(ids, e.CloudID)
-	}
-	out, err := client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
-		GroupIds: ids,
-	})
-	if err != nil {
-		return nil, []error{fmt.Errorf("describe security groups: %w", err)}
-	}
-
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(client, &ec2.DescribeSecurityGroupsInput{})
 	var resources []model.Resource
-	for _, sg := range out.SecurityGroups {
-		id := aws.ToString(sg.GroupId)
-		tags := ec2TagMap(sg.Tags)
-		name := aws.ToString(sg.GroupName)
-		attrs := map[string]any{
-			"description": aws.ToString(sg.Description),
-			"vpc_id":      aws.ToString(sg.VpcId),
-			"ingress":     normalizeRules(sg.IpPermissions),
-			"egress":      normalizeRules(sg.IpPermissionsEgress),
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, []error{fmt.Errorf("describe security groups: %w", err)}
 		}
-		resources = append(resources, baseResource("aws_security_group", id, name, region, attrs, tags))
+
+		for _, sg := range page.SecurityGroups {
+			id := aws.ToString(sg.GroupId)
+			tags := ec2TagMap(sg.Tags)
+			name := aws.ToString(sg.GroupName)
+			attrs := map[string]any{
+				"description": aws.ToString(sg.Description),
+				"vpc_id":      aws.ToString(sg.VpcId),
+				"ingress":     NormalizeSecurityGroupRules(normalizeRules(sg.IpPermissions)),
+				"egress":      NormalizeSecurityGroupRules(normalizeRules(sg.IpPermissionsEgress)),
+			}
+			resources = append(resources, baseResource("aws_security_group", id, name, region, attrs, tags))
+		}
 	}
 	return resources, nil
 }
@@ -169,8 +171,8 @@ func normalizeRules(perms []ec2types.IpPermission) []map[string]any {
 	for _, p := range perms {
 		rule := map[string]any{
 			"protocol":   aws.ToString(p.IpProtocol),
-			"from_port":  p.FromPort,
-			"to_port":    p.ToPort,
+			"from_port":  Int32Value(p.FromPort),
+			"to_port":    Int32Value(p.ToPort),
 		}
 		var cidrs []string
 		for _, r := range p.IpRanges {
