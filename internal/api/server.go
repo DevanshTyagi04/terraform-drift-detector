@@ -58,7 +58,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/schedules", s.handleUpsertSchedule)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/schedules", s.handleDeleteSchedule)
 	s.mux.HandleFunc("GET /", s.handleDashboard)
-	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+	staticFS := http.StripPrefix(
+		"/static/",
+		http.FileServer(http.Dir("web/static")),
+	)
+
+	s.mux.Handle("GET /static/{path...}", staticFS)
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
