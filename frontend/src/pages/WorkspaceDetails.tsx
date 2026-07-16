@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getWorkspace, getWorkspaceScans, deleteWorkspace, triggerScan, upsertSchedule, deleteSchedule } from '@/api/client';
+import { getWorkspace, getWorkspaceScans, deleteWorkspace, triggerScan, upsertSchedule, deleteSchedule, uploadStateFile } from '@/api/client';
 import { Card } from '@/components/common/Card';
 import { LoadingSpinner } from '@/components/common/Loading';
 import { ProviderBadge, StatusBadge } from '@/components/common/Badge';
-import { Play, Trash2, Edit2, AlertCircle, ArrowLeft, Clock, Calendar, ShieldAlert } from 'lucide-react';
+import { Play, Trash2, Edit2, AlertCircle, AlertTriangle, ArrowLeft, Clock, Calendar, ShieldAlert, UploadCloud, FileJson, X, Check } from 'lucide-react';
 import { useState } from 'react';
 
 export default function WorkspaceDetails() {
@@ -16,6 +16,14 @@ export default function WorkspaceDetails() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [cronInput, setCronInput] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  // File upload state variables
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'validating' | 'ready' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadedAt, setUploadedAt] = useState<string | null>(null);
 
   const workspaceQuery = useQuery({
     queryKey: ['workspace', id],
@@ -89,6 +97,101 @@ export default function WorkspaceDetails() {
     }
   };
 
+  const validateFile = (file: File) => {
+    setUploadError(null);
+    setUploadStatus('validating');
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'tfstate' && ext !== 'json') {
+      setUploadError('Unsupported file format. Please upload a .tfstate or .json file.');
+      setUploadStatus('error');
+      return false;
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadError('File size exceeds the 20MB limit.');
+      setUploadStatus('error');
+      return false;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        JSON.parse(e.target?.result as string);
+        setUploadStatus('ready');
+      } catch (err) {
+        setUploadError('Invalid JSON format. The file is not a valid Terraform state.');
+        setUploadStatus('error');
+      }
+    };
+    reader.onerror = () => {
+      setUploadError('Failed to read file.');
+      setUploadStatus('error');
+    };
+    reader.readAsText(file);
+    return true;
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIsDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setSelectedFile(file);
+      validateFile(file);
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      validateFile(file);
+    }
+  };
+
+  const handleClearFile = () => {
+    setSelectedFile(null);
+    setUploadError(null);
+    setUploadStatus('idle');
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !selectedFile || uploadStatus !== 'ready') return;
+
+    setUploadStatus('uploading');
+    try {
+      const res = await uploadStateFile(id, selectedFile);
+      setUploadStatus('success');
+      setUploadedAt(new Date(res.uploaded_at).toLocaleString());
+      queryClient.invalidateQueries({ queryKey: ['workspace', id] });
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to upload state file.');
+      setUploadStatus('error');
+    }
+  };
+
+  const handleCloseUploadModal = () => {
+    setShowUploadModal(false);
+    setSelectedFile(null);
+    setUploadError(null);
+    setUploadStatus('idle');
+    setUploadedAt(null);
+  };
+
   const isLoading = workspaceQuery.isLoading || scansQuery.isLoading;
   const isError = workspaceQuery.isError || scansQuery.isError;
 
@@ -103,7 +206,7 @@ export default function WorkspaceDetails() {
         <p className="text-sm font-mono">Workspace details not found.</p>
         <button
           onClick={() => navigate('/workspaces')}
-          className="text-xs text-terraform underline"
+          className="text-xs text-terraform underline animate-fade-in"
         >
           Back to Workspaces
         </button>
@@ -151,12 +254,16 @@ export default function WorkspaceDetails() {
               </div>
               <div className="space-y-1">
                 <p className="text-2xs font-mono uppercase text-muted-foreground tracking-wider">Terraform State Backend</p>
-                <p className="text-sm font-semibold text-foreground uppercase">{ws.state.backend}</p>
+                <p className="text-sm font-semibold text-foreground uppercase">
+                  {ws.state.backend === 'local' ? 'Uploaded State File' : 'AWS S3 Bucket'}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-2xs font-mono uppercase text-muted-foreground tracking-wider">State File Location</p>
-                <p className="text-sm font-semibold text-foreground truncate font-mono text-xs max-w-xs" title={ws.state.backend === 'local' ? ws.state.path : `${ws.state.bucket}/${ws.state.key}`}>
-                  {ws.state.backend === 'local' ? ws.state.path : `${ws.state.bucket}/${ws.state.key}`}
+                <p className="text-sm font-semibold text-foreground truncate font-mono text-xs max-w-xs" title={ws.state.backend === 'local' ? (ws.state.path || '') : `${ws.state.bucket}/${ws.state.key}`}>
+                  {ws.state.backend === 'local'
+                    ? (ws.state.path || '').split(/[\/\\]/).pop() || ws.state.path || ''
+                    : `${ws.state.bucket}/${ws.state.key}`}
                 </p>
               </div>
             </div>
@@ -172,6 +279,16 @@ export default function WorkspaceDetails() {
               <Play className="h-4 w-4 fill-current" />
               <span>{isTriggering ? 'Running Scan...' : 'Run Scan'}</span>
             </button>
+
+            {ws.state.backend === 'local' && (
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="bg-card border border-border text-foreground hover:bg-border/60 font-medium py-2 px-4 rounded-lg text-sm inline-flex items-center justify-center space-x-2 transition-all cursor-pointer"
+              >
+                <UploadCloud className="h-4 w-4" />
+                <span>Replace State</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
@@ -363,6 +480,125 @@ export default function WorkspaceDetails() {
                     Save
                   </button>
                 </div>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* State File Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full p-6 border-border bg-card shadow-2xl space-y-6">
+            <div>
+              <h4 className="font-bold text-foreground text-lg">Replace State File</h4>
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload a new Terraform state file to overwrite the current state configuration.
+              </p>
+            </div>
+            <form onSubmit={handleUploadSubmit} className="space-y-4">
+              {uploadStatus === 'success' ? (
+                <div className="border border-success/30 rounded-xl p-6 bg-success/5 text-center space-y-3">
+                  <div className="h-10 w-10 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto border border-success/20">
+                    <Check className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-success font-mono">
+                      ✓ terraform.tfstate uploaded successfully
+                    </p>
+                    {uploadedAt && (
+                      <p className="text-3xs text-muted-foreground font-mono">
+                        Timestamp: {uploadedAt}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : selectedFile ? (
+                <div className="border border-border rounded-xl p-4 bg-background/40 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <FileJson className="h-8 w-8 text-terraform" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground truncate max-w-[200px]" title={selectedFile.name}>
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {(selectedFile.size / 1024).toFixed(1)} KB | Status:{' '}
+                        <span className={
+                          uploadStatus === 'ready' ? 'text-success font-semibold font-mono' :
+                          uploadStatus === 'error' ? 'text-error font-semibold font-mono' :
+                          uploadStatus === 'uploading' ? 'text-go font-semibold font-mono animate-pulse' :
+                          'text-go font-semibold font-mono'
+                        }>
+                          {uploadStatus.toUpperCase()}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  {uploadStatus !== 'uploading' && (
+                    <button
+                      type="button"
+                      onClick={handleClearFile}
+                      className="p-1.5 hover:bg-border/60 rounded-lg text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    >
+                      <X className="h-4.5 w-4.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${
+                    isDragActive
+                      ? 'border-terraform bg-terraform/5'
+                      : 'border-border hover:border-border/80 bg-background/20'
+                  }`}
+                  onClick={() => document.getElementById('details-file-input')?.click()}
+                >
+                  <input
+                    id="details-file-input"
+                    type="file"
+                    accept=".tfstate,.json"
+                    onChange={handleFileInput}
+                    className="hidden"
+                  />
+                  <UploadCloud className="h-8 w-8 text-muted-foreground/60 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-foreground">
+                    Drag & drop your state file here, or{' '}
+                    <span className="text-terraform hover:underline font-semibold">browse</span>
+                  </p>
+                  <p className="text-3xs text-muted-foreground mt-1 font-mono">
+                    Accepts: *.tfstate, *.json (Max 20MB)
+                  </p>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="flex items-center space-x-2 text-xs text-error bg-error/10 border border-error/20 p-3 rounded-lg font-mono">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-border flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={handleCloseUploadModal}
+                  className="px-4 py-2 bg-border/50 text-foreground border border-border text-xs rounded-lg hover:bg-border font-medium cursor-pointer"
+                >
+                  {uploadStatus === 'success' ? 'Done' : 'Cancel'}
+                </button>
+                {uploadStatus !== 'success' && (
+                  <button
+                    type="submit"
+                    disabled={uploadStatus !== 'ready'}
+                    className="px-4 py-2 bg-terraform hover:bg-terraform/90 text-white text-xs rounded-lg font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
+                  </button>
+                )}
               </div>
             </form>
           </Card>

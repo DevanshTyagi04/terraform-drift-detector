@@ -1,19 +1,25 @@
-.PHONY: build test run-server run-scan clean
+ifeq ($(OS),Windows_NT)
+    EXE=.exe
+    RM=rmdir /s /q
+else
+    EXE=
+    RM=rm -rf
+endif
 
-export PATH := /usr/local/go/bin:$(PATH)
+.PHONY: frontend backend build test clean
 
-build:
-	go build -o bin/driftctl ./cmd/driftctl
-	go build -o bin/drift-server ./cmd/drift-server
+frontend:
+	cd frontend && npm install
+	cd frontend && npm run build
+
+backend:
+	go build -o bin/driftctl$(EXE) ./cmd/driftctl
+	go build -o bin/drift-server$(EXE) ./cmd/drift-server
+
+build: frontend backend
 
 test:
 	go test ./...
 
-run-server: build
-	./bin/drift-server -config configs/driftctl.yaml
-
-run-scan: build
-	./bin/driftctl scan --state testdata/state/sample.tfstate --provider aws --skip-cloud
-
 clean:
-	rm -rf bin/
+	$(RM) bin

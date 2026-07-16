@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +60,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.handleGetReport)
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/schedules", s.handleUpsertSchedule)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/schedules", s.handleDeleteSchedule)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/state", s.handleUploadState)
 	s.mux.HandleFunc("GET /", s.handleDashboard)
 
 	staticFS := http.StripPrefix(
@@ -257,6 +261,125 @@ func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	s.scheduler.Unregister(id)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleUploadState(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "workspace ID is required")
+		return
+	}
+
+	ws, err := s.store.GetWorkspace(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+
+	// 1. Limit form size to 20MB
+	r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
+
+	// 2. Parse Multipart form
+	if err := r.ParseMultipartForm(20 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "failed to parse multipart form: file size may exceed 20MB limit")
+		return
+	}
+
+	file, header, err := r.FormFile("state")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "state form field is required")
+		return
+	}
+	defer file.Close()
+
+	// Validate file size
+	if header.Size > 20*1024*1024 {
+		writeError(w, http.StatusBadRequest, "file size exceeds 20MB limit")
+		return
+	}
+
+	// Validate file extension
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext != ".tfstate" && ext != ".json" {
+		writeError(w, http.StatusBadRequest, "invalid file type: only .tfstate and .json files are supported")
+		return
+	}
+
+	// 3. Setup target directories
+	dbPath := os.Getenv("DRIFTCTL_DB_PATH")
+	if dbPath == "" {
+		dbPath = "driftctl.db"
+	}
+	dataDir := filepath.Dir(dbPath)
+	statefilesDir := filepath.Join(dataDir, "statefiles")
+	tmpDir := filepath.Join(statefilesDir, "tmp")
+
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize storage directories")
+		return
+	}
+
+	// 4. Atomic write to temp file in the same directory/volume
+	tempFile, err := os.CreateTemp(tmpDir, "upload-*.json")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create temporary file")
+		return
+	}
+	tempName := tempFile.Name()
+	defer func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempName)
+	}()
+
+	// Read content and write to temp file
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to read file content")
+		return
+	}
+
+	// Parse JSON to validate format
+	var jsonCheck any
+	if err := json.Unmarshal(data, &jsonCheck); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON format")
+		return
+	}
+
+	if _, err := tempFile.Write(data); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to write to temporary storage")
+		return
+	}
+	_ = tempFile.Close()
+
+	// 5. Final move
+	workspaceDir := filepath.Join(statefilesDir, id)
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create workspace storage directory")
+		return
+	}
+
+	finalFilename := fmt.Sprintf("state_%d.json", time.Now().Unix())
+	finalPath := filepath.Join(workspaceDir, finalFilename)
+
+	if err := os.Rename(tempName, finalPath); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to finalize file storage")
+		return
+	}
+
+	// 6. Update workspace settings
+	ws.State.Backend = "local"
+	ws.State.Path = finalPath
+	if err := s.store.SaveWorkspace(r.Context(), ws); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update workspace configuration")
+		return
+	}
+
+	// 7. Success response (path obfuscated)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"workspace_id": id,
+		"uploaded_at":  time.Now().UTC().Format(time.RFC3339),
+		"status":       "success",
+	})
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {

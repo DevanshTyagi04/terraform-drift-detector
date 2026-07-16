@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createWorkspace } from '@/api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { createWorkspace, uploadStateFile } from '@/api/client';
 import { Card } from '@/components/common/Card';
-import { ArrowLeft, Save, Layers, Server } from 'lucide-react';
+import { ArrowLeft, Save, Layers, Server, UploadCloud, FileJson, X, AlertTriangle } from 'lucide-react';
 import type { StateConfig } from '@/api/types';
 
 export default function CreateWorkspace() {
@@ -15,9 +15,6 @@ export default function CreateWorkspace() {
   const [regions, setRegions] = useState('us-east-1');
   const [backend, setBackend] = useState<'local' | 's3'>('local');
 
-  // Local state inputs
-  const [statePath, setStatePath] = useState('');
-
   // S3 state inputs
   const [s3Bucket, setS3Bucket] = useState('');
   const [s3Key, setS3Key] = useState('');
@@ -27,54 +24,155 @@ export default function CreateWorkspace() {
   const [ignoreTags, setIgnoreTags] = useState('driftctl_scan');
   const [ignoreAttrs, setIgnoreAttrs] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: createWorkspace,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
-      navigate(`/workspaces/${data.id}`);
-    },
-  });
+  // File upload state variables
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'validating' | 'ready' | 'uploading' | 'success' | 'error'>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Submit states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-    const stateConfig: StateConfig = {
-      backend,
-    };
+  const validateFile = (file: File) => {
+    setUploadError(null);
+    setUploadStatus('validating');
 
-    if (backend === 'local') {
-      stateConfig.path = statePath.trim();
-    } else {
-      stateConfig.bucket = s3Bucket.trim();
-      stateConfig.key = s3Key.trim();
-      stateConfig.region = s3Region.trim() || 'us-east-1';
+    // 1. Extension validation
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'tfstate' && ext !== 'json') {
+      setUploadError('Unsupported file format. Please upload a .tfstate or .json file.');
+      setUploadStatus('error');
+      return false;
     }
 
-    const regionsList = regions
-      .split(',')
-      .map((r) => r.trim())
-      .filter((r) => r !== '');
+    // 2. Size validation (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadError('File size exceeds the 20MB limit.');
+      setUploadStatus('error');
+      return false;
+    }
 
-    const tagsIgnoreList = ignoreTags
-      .split(',')
-      .map((t) => t.trim())
-      .filter((t) => t !== '');
+    // 3. JSON format validation
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        JSON.parse(e.target?.result as string);
+        setUploadStatus('ready');
+      } catch (err) {
+        setUploadError('Invalid JSON format. The file is not a valid Terraform state.');
+        setUploadStatus('error');
+      }
+    };
+    reader.onerror = () => {
+      setUploadError('Failed to read file.');
+      setUploadStatus('error');
+    };
+    reader.readAsText(file);
+    return true;
+  };
 
-    const attrsIgnoreList = ignoreAttrs
-      .split(',')
-      .map((a) => a.trim())
-      .filter((a) => a !== '');
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIsDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setIsDragActive(false);
+    }
+  };
 
-    mutation.mutate({
-      name: name.trim(),
-      provider,
-      state: stateConfig,
-      regions: regionsList,
-      compare: {
-        ignore_tags: tagsIgnoreList,
-        ignore_attributes: attrsIgnoreList,
-      },
-    });
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setSelectedFile(file);
+      validateFile(file);
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      validateFile(file);
+    }
+  };
+
+  const handleClearFile = () => {
+    setSelectedFile(null);
+    setUploadError(null);
+    setUploadStatus('idle');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+
+    if (backend === 'local' && (!selectedFile || uploadStatus !== 'ready')) {
+      setSubmitError('Please upload a valid Terraform state file.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const stateConfig: StateConfig = {
+        backend,
+      };
+
+      if (backend === 's3') {
+        stateConfig.bucket = s3Bucket.trim();
+        stateConfig.key = s3Key.trim();
+        stateConfig.region = s3Region.trim() || 'us-east-1';
+      }
+
+      const regionsList = regions
+        .split(',')
+        .map((r) => r.trim())
+        .filter((r) => r !== '');
+
+      const tagsIgnoreList = ignoreTags
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t !== '');
+
+      const attrsIgnoreList = ignoreAttrs
+        .split(',')
+        .map((a) => a.trim())
+        .filter((a) => a !== '');
+
+      // 1. Create Workspace configuration
+      const wsData = await createWorkspace({
+        name: name.trim(),
+        provider,
+        state: stateConfig,
+        regions: regionsList,
+        compare: {
+          ignore_tags: tagsIgnoreList,
+          ignore_attributes: attrsIgnoreList,
+        },
+      });
+
+      // 2. Upload file if backend is local
+      if (backend === 'local' && selectedFile) {
+        setUploadStatus('uploading');
+        await uploadStateFile(wsData.id, selectedFile);
+        setUploadStatus('success');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+      navigate(`/workspaces/${wsData.id}`);
+    } catch (err: any) {
+      console.error(err);
+      setSubmitError(err.response?.data?.error || 'Failed to create workspace. Please try again.');
+      setUploadStatus('error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -154,7 +252,7 @@ export default function CreateWorkspace() {
                 }`}
               >
                 <Server className="h-3.5 w-3.5" />
-                <span>Local File Path</span>
+                <span>Upload State File</span>
               </button>
               <button
                 type="button"
@@ -172,19 +270,75 @@ export default function CreateWorkspace() {
 
             {/* Backend Fields */}
             {backend === 'local' ? (
-              <div className="space-y-1.5 pt-2 animate-fade-in">
-                <label className="text-2xs font-mono uppercase text-muted-foreground tracking-wider">State File Local Path</label>
-                <input
-                  type="text"
-                  placeholder="e.g. testdata/state/sample.tfstate"
-                  value={statePath}
-                  onChange={(e) => setStatePath(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:border-terraform font-mono"
-                  required={backend === 'local'}
-                />
-                <p className="text-3xs text-muted-foreground leading-relaxed">
-                  Relative or absolute path to the local terraform.tfstate file on the host.
-                </p>
+              <div className="space-y-4 pt-2 animate-fade-in">
+                <label className="text-2xs font-mono uppercase text-muted-foreground tracking-wider block">Terraform State File</label>
+                
+                {selectedFile ? (
+                  <div className="border border-border rounded-xl p-4 bg-background/40 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <FileJson className="h-8 w-8 text-terraform" />
+                      <div>
+                        <p className="text-sm font-semibold text-foreground truncate max-w-[240px]" title={selectedFile.name}>
+                          {selectedFile.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono">
+                          {(selectedFile.size / 1024).toFixed(1)} KB | Status:{' '}
+                          <span className={
+                            uploadStatus === 'ready' ? 'text-success font-semibold font-mono' :
+                            uploadStatus === 'error' ? 'text-error font-semibold font-mono' :
+                            uploadStatus === 'uploading' ? 'text-go font-semibold font-mono animate-pulse' :
+                            'text-go font-semibold font-mono'
+                          }>
+                            {uploadStatus.toUpperCase()}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearFile}
+                      className="p-1.5 hover:bg-border/60 rounded-lg text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    >
+                      <X className="h-4.5 w-4.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onDragEnter={handleDrag}
+                    onDragOver={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDrop={handleDrop}
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+                      isDragActive
+                        ? 'border-terraform bg-terraform/5'
+                        : 'border-border hover:border-border/80 bg-background/20'
+                    }`}
+                    onClick={() => document.getElementById('file-input')?.click()}
+                  >
+                    <input
+                      id="file-input"
+                      type="file"
+                      accept=".tfstate,.json"
+                      onChange={handleFileInput}
+                      className="hidden"
+                    />
+                    <UploadCloud className="h-10 w-10 text-muted-foreground/60 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-foreground">
+                      Drag & drop your state file here, or{' '}
+                      <span className="text-terraform hover:underline font-semibold">browse</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">
+                      Accepts: *.tfstate, *.json (Max 20MB)
+                    </p>
+                  </div>
+                )}
+
+                {uploadError && (
+                  <div className="flex items-center space-x-2 text-xs text-error bg-error/10 border border-error/20 p-3 rounded-lg font-mono">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-4 pt-2 animate-fade-in">
@@ -255,6 +409,13 @@ export default function CreateWorkspace() {
           </div>
         </Card>
 
+        {submitError && (
+          <div className="flex items-center space-x-2 text-xs text-error bg-error/10 border border-error/20 p-3 rounded-lg font-mono">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{submitError}</span>
+          </div>
+        )}
+
         {/* Submit Actions */}
         <div className="flex items-center justify-end space-x-3">
           <button
@@ -266,11 +427,11 @@ export default function CreateWorkspace() {
           </button>
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={isSubmitting}
             className="bg-terraform hover:bg-terraform/90 text-white font-medium py-2.5 px-5 rounded-lg text-sm inline-flex items-center space-x-2 transition-all cursor-pointer shadow-lg shadow-terraform/20 disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
-            <span>{mutation.isPending ? 'Creating...' : 'Create Workspace'}</span>
+            <span>{isSubmitting ? 'Saving...' : 'Create Workspace'}</span>
           </button>
         </div>
       </form>

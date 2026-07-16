@@ -1,0 +1,23 @@
+services:
+  drift-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drift-detector-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - drift-data:/data
+    environment:
+      # Optional: forwarded from the host for local development.
+      # Production deployments on AWS should prefer IAM Roles.
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_DEFAULT_REGION
+      - AWS_REGION
+    restart: unless-stopped
+
+volumes:
+  drift-data:
+    driver: local

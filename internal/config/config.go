@@ -35,6 +35,9 @@ func Load(path string) (*File, error) {
 	if cfg.Database == "" {
 		cfg.Database = "driftctl.db"
 	}
+	if envDB := os.Getenv("DRIFTCTL_DB_PATH"); envDB != "" {
+		cfg.Database = envDB
+	}
 	if cfg.API.Addr == "" {
 		cfg.API.Addr = ":8080"
 	}

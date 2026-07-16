@@ -49,6 +49,12 @@ func openStore(cfgFile string) (store.Store, *config.File, error) {
 			dbPath = cfg.Database
 		}
 	}
+	if envDB := os.Getenv("DRIFTCTL_DB_PATH"); envDB != "" {
+		dbPath = envDB
+		if cfg != nil {
+			cfg.Database = envDB
+		}
+	}
 	st, err := store.OpenSQLite(dbPath)
 	if err != nil {
 		return nil, nil, err

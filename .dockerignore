@@ -1,0 +1,30 @@
+# Git and Github metadata
+.git
+.gitignore
+.github
+
+# Frontend dependencies and builds
+frontend/node_modules
+frontend/dist
+frontend/npm-debug.log
+
+# Compiled local Go binaries
+bin
+
+# Host database and log artifacts
+*.db
+*.log
+driftctl.db
+driftctl.db-journal
+
+# Go test coverage artifacts
+coverage
+*.out
+*.test
+
+# Local web directory (compiled in container from frontend builder stage)
+web/static/index-*.js
+web/static/index-*.css
+web/static/app.js
+web/static/style.css
+web/index.html

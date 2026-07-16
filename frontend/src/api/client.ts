@@ -66,3 +66,17 @@ export const upsertSchedule = async (workspaceId: string, cron: string): Promise
 export const deleteSchedule = async (workspaceId: string): Promise<void> => {
   await api.delete(`/api/v1/workspaces/${workspaceId}/schedules`);
 };
+
+export const uploadStateFile = async (
+  workspaceId: string,
+  file: File
+): Promise<{ workspace_id: string; uploaded_at: string; status: string }> => {
+  const formData = new FormData();
+  formData.append('state', file);
+  const { data } = await api.post(`/api/v1/workspaces/${workspaceId}/state`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return data;
+};
