@@ -1,0 +1,88 @@
+name: Release Publication
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release:
+    name: Build & Package Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Compile React Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Compile Release Binaries
+        run: |
+          # 1. Compile statically-linked Go binaries for target architectures
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/linux/driftctl ./cmd/driftctl
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/linux/drift-server ./cmd/drift-server
+
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/windows/driftctl.exe ./cmd/driftctl
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/windows/drift-server.exe ./cmd/drift-server
+
+          # macOS (Darwin) amd64
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/darwin/driftctl ./cmd/driftctl
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/darwin/drift-server ./cmd/drift-server
+
+      - name: Package Archives
+        run: |
+          # 2. Package binaries, static frontend assets, configs, and documentation
+          # Linux
+          cp -r configs dist/linux/
+          cp -r web dist/linux/
+          cp README.md dist/linux/
+          [ -f LICENSE ] && cp LICENSE dist/linux/ || true
+          cd dist/linux && tar -czf ../driftctl-${{ github.ref_name }}-linux-amd64.tar.gz . && cd ../..
+
+          # macOS (Darwin)
+          cp -r configs dist/darwin/
+          cp -r web dist/darwin/
+          cp README.md dist/darwin/
+          [ -f LICENSE ] && cp LICENSE dist/darwin/ || true
+          cd dist/darwin && tar -czf ../driftctl-${{ github.ref_name }}-darwin-amd64.tar.gz . && cd ../..
+
+          # Windows
+          cp -r configs dist/windows/
+          cp -r web dist/windows/
+          cp README.md dist/windows/
+          [ -f LICENSE ] && cp LICENSE dist/windows/ || true
+          cd dist/windows && zip -r ../driftctl-${{ github.ref_name }}-windows-amd64.zip . && cd ../..
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
