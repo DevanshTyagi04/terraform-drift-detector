@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0B1220;
+  --color-card: #111827;
+  --color-border: #1F2937;
+  --color-foreground: #F3F4F6;
+  --color-muted-foreground: #9CA3AF;
+  
+  --color-terraform: #7B42F6;
+  --color-aws: #FF9900;
+  --color-go: #00ADD8;
+  
+  --color-success: #22C55E;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
