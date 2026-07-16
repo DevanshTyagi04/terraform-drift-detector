@@ -1,0 +1,24 @@
+# AWS Region to deploy the instance
+aws_region = "us-east-1"
+
+# EC2 Instance type (defaults to t3.micro which is Free Tier eligible)
+instance_type = "t3.micro"
+
+# Size of root storage disk (gp3) in gigabytes
+root_volume_size = 20
+
+# Name of your pre-configured EC2 Key Pair (Required)
+key_name = "my-ssh-key"
+
+# Prefix used to name resource outputs
+project_name = "drift-detector"
+
+# Environment lifecycle tag
+environment = "production"
+
+# Custom metadata tags applied to all AWS resources
+tags = {
+  Owner       = "devops-team"
+  CostCenter  = "infrastructure"
+  AutomatedBy = "terraform"
+}
