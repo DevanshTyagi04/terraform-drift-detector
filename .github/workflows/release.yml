@@ -54,26 +54,20 @@ jobs:
 
       - name: Package Archives
         run: |
-          # 2. Package binaries, static frontend assets, configs, and documentation
+          # 2. Package binaries, static frontend assets, and configs
           # Linux
           cp -r configs dist/linux/
           cp -r web dist/linux/
-          cp README.md dist/linux/
-          [ -f LICENSE ] && cp LICENSE dist/linux/ || true
           cd dist/linux && tar -czf ../driftctl-${{ github.ref_name }}-linux-amd64.tar.gz . && cd ../..
 
           # macOS (Darwin)
           cp -r configs dist/darwin/
           cp -r web dist/darwin/
-          cp README.md dist/darwin/
-          [ -f LICENSE ] && cp LICENSE dist/darwin/ || true
           cd dist/darwin && tar -czf ../driftctl-${{ github.ref_name }}-darwin-amd64.tar.gz . && cd ../..
 
           # Windows
           cp -r configs dist/windows/
           cp -r web dist/windows/
-          cp README.md dist/windows/
-          [ -f LICENSE ] && cp LICENSE dist/windows/ || true
           cd dist/windows && zip -r ../driftctl-${{ github.ref_name }}-windows-amd64.zip . && cd ../..
 
       - name: Publish GitHub Release
