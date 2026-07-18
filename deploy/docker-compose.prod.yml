@@ -40,7 +40,8 @@ services:
 
 volumes:
   drift-prod-data:
-    name: drift-detector-data
+    external: true
+    name: terraform-drift-detector_drift-data
 
 networks:
   drift-network:
