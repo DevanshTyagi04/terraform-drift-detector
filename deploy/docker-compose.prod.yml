@@ -1,0 +1,47 @@
+services:
+  drift-detector:
+    image: ghcr.io/devanshtyagi04/terraform-drift-detector:edge
+    container_name: drift-detector-app
+
+    expose:
+      - "8080"
+
+    volumes:
+      - drift-prod-data:/data
+
+    environment:
+      - DRIFTCTL_DB_PATH=/data/driftctl.db
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+
+    restart: unless-stopped
+
+    networks:
+      - drift-network
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: drift-detector-nginx
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+    depends_on:
+      drift-detector:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    networks:
+      - drift-network
+
+volumes:
+  drift-prod-data:
+    name: drift-detector-data
+
+networks:
+  drift-network:
+    driver: bridge
