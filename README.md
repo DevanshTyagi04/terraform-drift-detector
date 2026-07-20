@@ -1,105 +1,104 @@
-# 🌌 Terraform Drift Detector
+# Terraform Drift Detector
 
-A production-grade, DevOps-focused Terraform drift detection engine and interactive dashboard. It scans live cloud environments, compares them against your Terraform state files, and exposes real-time drift reports via a clean REST API, CLI, and modern React portal.
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat&logo=go)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react)
+![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat&logo=docker)
+![AWS](https://img.shields.io/badge/AWS-SDK_v2-232F3E?style=flat&logo=amazon-aws)
+![Terraform](https://img.shields.io/badge/Terraform-State_Parser-844FBA?style=flat&logo=terraform)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=flat&logo=github-actions)
+![License](https://img.shields.io/badge/License-MIT-green.style=flat)
+
+A web application and CLI tool that detects configuration drift between Terraform state files and live AWS cloud resources. It extracts managed resources from state files, inventories active cloud resources using AWS SDK paginators, normalizes complex attributes, and highlights resource mismatches in a web dashboard and command-line interface.
 
 ---
 
-## 💡 Problem Statement
+## 🌐 Live Demo
 
-Managing cloud infrastructure at scale via Infrastructure as Code (IaC) requires maintaining a perfect synchronization between your codebase and your cloud provider. Unfortunately, several factors break this alignment:
-1.  **Manual Tweaks ("ClickOps")**: Developers making emergency hotfixes directly in the AWS Console without reflecting changes in code.
-2.  **Resource Deletion**: Untracked manual deletion of managed resources outside of Terraform.
-3.  **Tag or Attribute Drift**: Unchecked tag removals or port adjustment configurations.
+- **Application URL**: [https://terraformdriftdevansh.duckdns.org](https://terraformdriftdevansh.duckdns.org)
 
-Without continuous drift monitoring, Terraform states become stale, leading to failed builds, unexpected deletions during plan apply phases, and silent security regressions. This project solves this by continuously auditing resources, normalising complex structural attributes, and displaying exact delta breakdowns.
+The live instance is deployed on an AWS EC2 instance using Docker Compose and an Nginx reverse proxy configured with Let's Encrypt SSL and automatic HTTP-to-HTTPS redirection.
+
+---
+
+## 🎯 Why I Built This
+
+I built this project to gain a deep technical understanding of infrastructure drift management by constructing a complete drift detection engine from scratch.
+
+Developing this system required designing a pipeline that handles Terraform state parsing, queries live cloud infrastructure via AWS SDK paginators, normalizes non-deterministic attributes (such as unordered security group rules), exposes a REST API and CLI, and serves an integrated frontend behind a secure reverse proxy.
+
+---
+
+## 📋 Problem Statement
+
+Infrastructure drift occurs when the actual state of cloud resources diverges from the expected state defined in Infrastructure as Code (IaC) files. This usually happens due to manual modifications made in the cloud console ("ClickOps"), out-of-band updates, or emergency hotfixes that are not committed back to Terraform.
+
+Unmanaged drift leads to stale Terraform state files, unexpected resource replacements during subsequent `terraform apply` runs, and undetected security policy violations.
+
+This project addresses the problem by parsing Terraform state files, discovering corresponding live AWS resources, normalizing complex attributes, and identifying missing, extra, or modified resources.
 
 ---
 
 ## ✨ Features
 
--   **Hybrid Inventory Discovery**: Dynamically scans all cloud resources of the same types defined in the Terraform state using official AWS SDK paginators.
--   **Multi-Workspace Isolation**: Separates environments (e.g., Staging, Production) with logical filters, distinct configurations, and region constraints.
--   **Drift Classification**: Detects:
-    *   **Missing in Cloud**: Resources defined in code that have been deleted manually.
-    *   **Extra in Cloud**: Resources present in the cloud of the audited types but untracked by Terraform.
-    *   **Attribute Drift**: Specific property mismatches (e.g., EC2 instance types, VPC DNS settings).
-    *   **Tag Drift**: Mismatches between expected and actual resource metadata tags.
--   **Centralized Attribute Normalization**: Sorts complex security group ingress/egress rules deterministically and strips Terraform-specific attributes (`force_destroy`, `lifecycle`) to avoid false positives.
--   **Atomic State Uploads**: Supports versioned multipart file uploads with automatic JSON format parsing and file size limit enforcement (20MB).
--   **REST API & Scheduler**: Includes an HTTP server daemon with built-in cron scanner registration and SQLite results persistence.
--   **Command Line Tool (`driftctl`)**: Provides a full Cobra-based CLI interface to execute scans, register cron schedules, and output reports in console-friendly tables or JSON.
--   **Interactive React UI Portal**: Designed with Tailwind CSS v4, displaying scan logs, workspace status summaries, and side-by-side JSON drift diff viewers.
+- **Workspace-based scanning**: Isolate environments (e.g., production, staging) with specific state files, target regions, and ignore rules.
+- **Terraform state upload**: Upload `.tfstate` or `.json` files (up to 20MB) via drag-and-drop or API with atomic disk writes.
+- **AWS inventory discovery**: Fetch all cloud resources of managed types using official AWS SDK paginators.
+- **Attribute drift detection**: Compare expected vs. actual attributes (instance types, VPC DNS settings, etc.).
+- **Tag drift detection**: Identify added, removed, or modified resource metadata tags.
+- **Structural rule normalization**: Sort security group rules and dereference pointer types to eliminate false positives.
+- **REST API**: Manage workspaces, trigger scans, upload state files, and fetch JSON reports over HTTP/HTTPS.
+- **CLI tool (`driftctl`)**: Execute ad-hoc or workspace scans, list stored results, and manage schedules from the terminal.
+- **React dashboard**: View scan history, workspace statuses, and side-by-side JSON diffs.
+- **SQLite persistence**: Store workspace metadata and historical scan results in a single database file.
+- **HTTPS deployment**: Pre-configured Nginx reverse proxy setup with SSL termination and security headers.
 
 ---
 
 ## 🛠️ Tech Stack
 
-*   **Backend**: Go 1.25, Cobra CLI, net/http Mux router
-*   **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, TanStack Query v5, Axios, Lucide React
-*   **Database**: SQLite (utilizing a pure-Go, CGO-free compiler: `modernc.org/sqlite`)
-*   **Cloud Integrations**: AWS SDK for Go v2 (EC2, S3, Subnets, VPCs, Security Groups)
-*   **DevOps & Containerization**: Docker, Docker Compose
-*   **Networking & Proxy**: Nginx 1.27 (Alpine)
-*   **CI/CD**: GitHub Actions (Linting, Compose Build tests, Cross-platform Release builds)
+- **Backend**: Go 1.25, Cobra CLI, `net/http` standard library router
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, TanStack Query v5, Axios, Lucide React
+- **Database**: SQLite (via pure-Go `modernc.org/sqlite` driver, no CGO dependency)
+- **Cloud**: AWS (EC2, S3, Subnets, VPCs, Security Groups) via AWS SDK for Go v2
+- **DevOps**: Docker, Docker Compose, GitHub Actions (CI, Docker verification, release builds)
+- **Infrastructure**: Terraform (AWS EC2 provisioning module under `deploy/terraform/`)
+- **Containerization**: Multi-stage Dockerfile (`node:22-alpine` builder, `golang:1.25-alpine` builder, `alpine:3.21` runtime)
+- **Networking**: Nginx 1.27 (Alpine) reverse proxy with gzip compression, WebSocket support, and static asset caching
 
 ---
 
 ## 🏗️ Architecture
 
-The application is structured into modular layers designed for performance, isolation, and security.
-
-### System Diagram
+### Production Architecture Diagram
 
 ```mermaid
 graph TD
-    subgraph Client Layer
-        CLI[driftctl CLI]
-        UI[React Portal]
+    User[User Browser / Client] -->|HTTPS :443| DuckDNS[DuckDNS Domain: terraformdriftdevansh.duckdns.org]
+    DuckDNS -->|SSL / TLS| Nginx[Nginx Reverse Proxy Container]
+    
+    subgraph Docker Network: drift-network
+        Nginx -->|Proxy Pass :8080| Backend[drift-server Go REST API Container]
+        Backend -->|Query / Update| SQLite[(SQLite DB: driftctl.db)]
+        Backend -->|Read State Files| StateFiles[State Storage: statefiles/]
     end
 
-    subgraph Proxy & Gateway
-        Nginx[Nginx Reverse Proxy: Port 80]
+    subgraph AWS Cloud Infrastructure
+        Backend -->|AWS SDK v2 API Calls| AWSAPI[AWS APIs]
+        AWSAPI -->|Inventory Query| AWSRes[AWS Resources: EC2, S3, VPC, Subnets, SGs]
     end
 
-    subgraph Application Layer
-        Daemon[drift-server REST API: Port 8080]
-        Scanner[Scanner Orchestrator]
-        StateReader[State Extractor]
-        AWSProvider[AWS Hybrid Inventory Provider]
-        Compare[Comparison Engine]
-    end
-
-    subgraph Data Store
-        SQLite[(SQLite Database: driftctl.db)]
-        StateStore[Local State Storage: statefiles/]
-    end
-
-    subgraph External Dependencies
-        AWS[AWS APIs: EC2, S3, VPC, IAM]
-    end
-
-    %% Client Mappings
-    UI -->|HTTP Requests| Nginx
-    Nginx -->|Proxy Pass / Port 8080| Daemon
-    CLI -->|Local File Access / SQLite| SQLite
-
-    %% Application Mappings
-    Daemon -->|Writes Workspace & Scans| SQLite
-    Daemon -->|Triggers Scans| Scanner
-    Scanner -->|Reads Expected State| StateReader
-    StateReader -->|Reads State Files| StateStore
-    Scanner -->|Queries Live Inventory| AWSProvider
-    AWSProvider -->|AWS SDK v2 Calls| AWS
-    Scanner -->|Compares Configurations| Compare
-    Compare -->|Saves Results| SQLite
+    CLI[driftctl CLI] -->|Read / Write| SQLite
+    CLI -->|AWS SDK v2 Calls| AWSAPI
 ```
 
-### Key Architectural Layers:
-1.  **Frontend (UI)**: Bundled and compiled statically. Served by the Go HTTP server from the `web` folder.
-2.  **Server Daemon (`drift-server`)**: Handles authentication, cron task registrations, SQLite transactions, and state file uploads.
-3.  **State Extractor**: Parses local or versioned `.json` and `.tfstate` files to extract expected resource mappings.
-4.  **AWS Hybrid Inventory Provider**: Calls list and describe endpoints. Restricts queries to the resource types present in the state file.
-5.  **Comparison Engine**: Calculates deltas by normalising values (e.g. resolving pointers, sorting rule slices, and stripping lifecycle keys) before performing direct maps.
+### Architectural Overview
+
+1. **Client & Ingress**: HTTPS traffic arrives at Nginx on port 443. Nginx terminates SSL, applies security headers, handles static asset caching (`/static/`), and proxies requests to `drift-server` on port 8080 over an internal Docker bridge network (`drift-network`).
+2. **Backend Daemon (`drift-server`)**: Serves the compiled React frontend, handles REST API calls, manages workspace states, and triggers background scan executions.
+3. **State Reader**: Extracts expected resource states from uploaded `.tfstate` or `.json` files.
+4. **AWS Provider**: Inspects resource types present in the state file and inventories all active cloud resources of those types using AWS SDK paginators.
+5. **Comparison Engine**: Normalizes attributes (dereferencing pointers, sorting security group ingress/egress rules, stripping lifecycle keys) and compares expected vs. actual states.
+6. **Persistence**: Scan reports and workspace configurations are persisted in SQLite.
 
 ---
 
@@ -107,31 +106,34 @@ graph TD
 
 ```
 .
-├── .github/workflows/         # CI/CD pipelines (ci.yml, docker.yml, release.yml)
+├── .github/workflows/         # GitHub Actions workflows (ci.yml, docker.yml, release.yml)
 ├── cmd/
-│   ├── drift-server/          # Main entrypoint for Go REST Server
-│   └── driftctl/              # Main entrypoint for Cobra CLI
-├── configs/                   # Configuration files (driftctl.yaml template)
+│   ├── drift-server/          # Entry point for the REST API server daemon
+│   └── driftctl/              # Entry point for the Cobra CLI tool
+├── configs/                   # Configuration files (driftctl.yaml)
 ├── deploy/
 │   ├── nginx/                 # Nginx reverse proxy configurations
-│   │   ├── nginx.conf         # Global Nginx server settings
-│   │   └── conf.d/            # Virtual host definitions
-│   ├── terraform/             # AWS provisioning infrastructure Terraform module
-│   └── docker-compose.prod.yml # Production Docker Compose setup
-├── docker-compose.yml         # Local development Compose configuration
-├── Dockerfile                 # Multi-stage image build file
-├── frontend/                  # React TypeScript frontend code
+│   │   ├── nginx.conf         # Global Nginx settings
+│   │   └── conf.d/            # Virtual host configurations
+│   ├── terraform/             # AWS EC2 infrastructure provisioning module
+│   └── docker-compose.prod.yml # Production Docker Compose configuration
+├── docs/                      # Documentation
+│   ├── API.md                 # Detailed REST API reference
+│   └── CLI.md                 # Detailed CLI command reference
+├── docker-compose.yml         # Development Docker Compose file
+├── Dockerfile                 # Multi-stage Docker image build specification
+├── frontend/                  # React TypeScript frontend source code
 ├── internal/
-│   ├── api/                   # REST controller handlers and middleware
-│   ├── config/                # Parser for file and environment configurations
+│   ├── api/                   # REST API routes and handlers
+│   ├── config/                # Configuration file and environment variable parser
 │   ├── drift/                 # Core comparison engine
-│   ├── model/                 # Shared domain data structures
+│   ├── model/                 # Shared data models
 │   ├── providers/             # Cloud inventory implementations (AWS SDK integrations)
-│   ├── scan/                  # Scanner coordinator orchestration
+│   ├── scan/                  # Scanner orchestrator
 │   ├── state/                 # Terraform state parser and reader
-│   └── store/                 # SQLite storage access functions
-├── web/                       # Compiled frontend static assets (served by Server)
-└── README.md                  # Project documentation
+│   └── store/                 # SQLite storage implementation
+├── web/                       # Compiled frontend static assets (served by Go server)
+└── README.md                  # Project overview and documentation
 ```
 
 ---
@@ -139,268 +141,240 @@ graph TD
 ## 🔄 How It Works
 
 ```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ 1. Create       │       │ 2. Upload State │       │ 3. Fetch Cloud  │
-│    Workspace    ├──────►│    Atomically   ├──────►│    Inventory    │
-└─────────────────┘       └─────────────────┘       └────────┬────────┘
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│ 1. Create        ├─────►│ 2. Upload State  ├─────►│ 3. Fetch Cloud   │
+│    Workspace     │      │    File          │      │    Resources     │
+└──────────────────┘      └──────────────────┘      └────────┬─────────┘
                                                              │
-┌─────────────────┐       ┌─────────────────┐       ┌────────▼────────┐
-│ 6. Persist &    │       │ 5. Calculate    │       │ 4. Normalize    │
-│    View Results │◄──────┤    Deltas       │◄──────┤    Structures   │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
+┌──────────────────┐      ┌──────────────────┐      ┌────────▼─────────┐
+│ 6. Persist &     │◄─────┤ 5. Execute Drift │◄─────┤ 4. Normalize     │
+│    View Findings │      │    Comparison    │      │    Attributes    │
+└──────────────────┘      └──────────────────┘      └──────────────────┘
 ```
 
-1.  **Creating a Workspace**: You register a workspace via the API or CLI, defining the regions to scan, custom ignore tags, and schedules.
-2.  **Uploading Terraform State**: The state file is uploaded via a multipart HTTP request. The system validates the file size (max 20MB), verifies that it is valid JSON, and atomically moves it into the versioned storage directory.
-3.  **Fetching AWS Resources**: The scanner extracts all managed resource types from the state file. It uses AWS SDK paginators to fetch *all* active resources of those types in the target regions.
-4.  **Normalization**: Pointers are safely dereferenced, security group rules are sorted deterministically, and lifecycle variables are stripped to guarantee clean comparisons.
-5.  **Drift Comparison**: The engine maps expected attributes from the state against actual values from AWS. Discovered items are grouped into matches, modified properties, missing items, and untracked resources.
-6.  **Persisting & Viewing**: The report is saved to SQLite, making the scan history and attribute differences immediately available on the React dashboard.
+1. **Workspace Creation**: A workspace is registered via the web UI, API, or CLI, specifying target AWS regions and tag ignore filters.
+2. **State Upload**: The Terraform state file is uploaded via HTTP multipart form or saved locally. The file is validated for JSON format syntax and stored.
+3. **Cloud Inventory Fetching**: The scanner identifies resource types in the state file and fetches all live AWS resources of those types using SDK paginators.
+4. **Attribute Normalization**: Pointers are dereferenced, lists (e.g., security group rules) are sorted deterministically, and Terraform lifecycle attributes are stripped.
+5. **Drift Comparison**: The engine compares expected state values against actual AWS values and categorizes resources into: matched, modified (attribute/tag drift), missing in cloud, or extra in cloud.
+6. **Persistence & Viewing**: Results are stored in SQLite and displayed in the React dashboard or terminal.
 
 ---
 
 ## 🖼️ Screenshots
 
-*Note: The following capture areas show the key layouts of the React interface.*
-
 #### 1. Dashboard Overview
-![Dashboard Placeholder](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/dashboard_placeholder.png)
-*Displays overall scan success rates, total active workspaces, pending scheduled run counts, and list of recent scan completions.*
+![Dashboard Overview](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/dashboard_placeholder.png)
+*Workspace summary metrics, recent scan history, and status breakdown.*
 
 #### 2. Workspace Creation
-![Workspace Creation Placeholder](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/workspace_creation_placeholder.png)
-*Allows users to register target scanning regions, exclude patterns, and set cron frequencies.*
+![Workspace Creation](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/workspace_creation_placeholder.png)
+*Configuration portal for target regions and ignore tag filters.*
 
 #### 3. State File Upload
-![State Upload Placeholder](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/state_upload_placeholder.png)
-*Interactive Drag-and-Drop portal with real-time JSON format verification.*
+![State Upload](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/state_upload_placeholder.png)
+*Drag-and-drop state file uploader with JSON validation.*
 
-#### 4. Interactive Drift Results
-![Drift Results Placeholder](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/drift_results_placeholder.png)
-*Side-by-side JSON comparative view showing expected Terraform attributes vs actual AWS attributes.*
+#### 4. Drift Results
+![Drift Results](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/drift_results_placeholder.png)
+*Side-by-side comparative diff of expected Terraform attributes vs. actual AWS configurations.*
 
-#### 5. Scan History Logs
-![Scan History Placeholder](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/scan_history_placeholder.png)
-*Full audit log of execution timestamps, counts of unmanaged items, and trend analyses.*
+#### 5. Scan History
+![Scan History](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/scan_history_placeholder.png)
+*Historical execution log and unmanaged resource tracking.*
 
 ---
 
-## 🌐 API Documentation
+## 🌐 API Overview
 
-All API requests except `/health` and `/static/*` require authentication if `api.api_key` is set in the configuration. Provide it via the `X-API-Key` or `Authorization: Bearer <key>` headers.
+For detailed request/response examples and authentication details, see the [API Reference Documentation](docs/API.md).
 
-| Endpoint | Method | Purpose | Request Body | Response (Success) |
-| :--- | :--- | :--- | :--- | :--- |
-| `/health` | `GET` | Health Check | None | `{"status": "ok"}` |
-| `/api/v1/workspaces` | `GET` | List all workspaces | None | List of Workspace objects |
-| `/api/v1/workspaces` | `POST` | Create workspace | Workspace JSON | Created Workspace object |
-| `/api/v1/workspaces/{id}` | `GET` | Fetch workspace detail | None | Workspace configuration |
-| `/api/v1/workspaces/{id}` | `DELETE` | Delete workspace | None | `204 No Content` |
-| `/api/v1/workspaces/{id}/scans` | `POST` | Trigger manual scan | None | Executed Scan Report |
-| `/api/v1/workspaces/{id}/scans` | `GET` | List scans of workspace | None (Supports `?limit=N`) | List of Scan logs |
-| `/api/v1/scans` | `GET` | List all system scans | None (Supports `?limit=N`) | List of Scan logs |
-| `/api/v1/scans/{id}` | `GET` | Fetch detailed scan | None | Scan Report |
-| `/api/v1/scans/{id}/report` | `GET` | Fetch report format | None (Supports `?format=json/table`) | Raw Text/JSON report |
-| `/api/v1/workspaces/{id}/schedules` | `PUT` | Add/Update cron scan | `{"cron": "* * * * *"}` | Mapped schedule response |
-| `/api/v1/workspaces/{id}/schedules` | `DELETE` | Remove cron scan | None | `204 No Content` |
-| `/api/v1/workspaces/{id}/state` | `POST` | Upload state file | `multipart/form-data` with `state` file | `{"workspace_id": "...", "uploaded_at": "...", "status": "success"}` |
+| Endpoint | Method | Purpose |
+| :--- | :--- | :--- |
+| `/health` | `GET` | Server health check (unauthenticated) |
+| `/api/v1/workspaces` | `GET` | List all workspaces |
+| `/api/v1/workspaces` | `POST` | Create a workspace |
+| `/api/v1/workspaces/{id}` | `GET` | Get workspace details |
+| `/api/v1/workspaces/{id}` | `DELETE` | Delete a workspace |
+| `/api/v1/workspaces/{id}/state` | `POST` | Upload state file for a workspace |
+| `/api/v1/workspaces/{id}/scans` | `POST` | Trigger a manual drift scan |
+| `/api/v1/workspaces/{id}/scans` | `GET` | List scans for a workspace |
+| `/api/v1/scans` | `GET` | List all scans |
+| `/api/v1/scans/{id}` | `GET` | Get detailed scan report |
+| `/api/v1/scans/{id}/report` | `GET` | Get formatted report (`json` or `table`) |
+| `/api/v1/workspaces/{id}/schedules` | `PUT` | Upsert cron schedule |
+| `/api/v1/workspaces/{id}/schedules` | `DELETE` | Remove cron schedule |
 
 ---
 
 ## 💻 CLI Usage
 
-The compiled `driftctl` binary allows running and managing configurations directly from the terminal.
+For complete flag options and advanced subcommands, see the [CLI Reference Documentation](docs/CLI.md).
 
 ```bash
-# General help
-driftctl --help
-
-# 1. Trigger an ad-hoc scan against a local state file
+# Scan using a local state file
 driftctl scan --state ./terraform.tfstate --provider aws --region us-east-1
 
-# 2. Trigger an ad-hoc scan against an S3 state file
-driftctl scan --state-bucket my-tf-bucket --state-key prod/terraform.tfstate --state-region us-east-1
+# Scan using an S3 backend state file
+driftctl scan --state-bucket my-tf-state --state-key prod/terraform.tfstate --state-region us-east-1
 
-# 3. Trigger a scan for an existing saved workspace
-driftctl scan --workspace prod --output table
+# Scan a saved workspace
+driftctl scan --workspace production --output table
 
-# 4. View a stored historical report
+# Display a past scan report
 driftctl report <scan-id> --output json
 
-# 5. List all registered workspaces
+# List workspaces
 driftctl workspace list
 
-# 6. Add/Update a scan schedule for a workspace
-driftctl schedule create --workspace prod --cron "0 */12 * * *"
+# Create a scan schedule
+driftctl schedule create --workspace production --cron "0 */6 * * *"
 ```
 
 ---
 
-## ⚙️ Installation
+## 🚀 Installation
 
-### Prerequisites
-*   Go 1.25 or later installed.
-*   Node.js 22 and npm installed.
-*   AWS CLI configured with credentials (if auditing live infrastructure).
+### Option 1: Using Docker Compose (Recommended)
 
-### Local Development Setup
-
-#### 1. Clone & Setup Backend
 ```bash
 # Clone the repository
 git clone https://github.com/DevanshTyagi04/terraform-drift-detector.git
 cd terraform-drift-detector
 
-# Download Go modules
-go mod download
-
-# Build backend binaries
-go build -v -o bin/driftctl ./cmd/driftctl
-go build -v -o bin/drift-server ./cmd/drift-server
+# Start the application using Docker Compose
+docker compose up -d
 ```
 
-#### 2. Setup React UI
-```bash
-# Enter frontend folder
-cd frontend
+The application will be available at `http://localhost:8080`.
 
-# Install package dependencies
-npm install
+### Option 2: Local Development Setup
 
-# Start local development server (proxies API requests to http://localhost:8080)
-npm run dev
-```
+#### Prerequisites
+- Go 1.25+
+- Node.js 22+ & npm
+- AWS CLI configured with read credentials
 
-#### 3. Start Server locally
-```bash
-# Run server from root directory
-./bin/drift-server --config configs/driftctl.yaml
-```
+#### Steps
+
+1. **Build the Frontend**:
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
+
+2. **Build and Run the Go Backend Server**:
+   ```bash
+   go build -o bin/drift-server ./cmd/drift-server
+   ./bin/drift-server --config configs/driftctl.yaml
+   ```
+
+3. **Build the CLI**:
+   ```bash
+   go build -o bin/driftctl ./cmd/driftctl
+   ./bin/driftctl --help
+   ```
 
 ---
 
 ## 🚢 Production Deployment
 
-For production deployments, the application should be deployed on a secure host (e.g., AWS EC2) behind an Nginx reverse proxy.
+The production deployment uses the following stack:
+- **AWS EC2**: Hosts the single-instance server.
+- **Docker Compose**: Orchestrates the Nginx reverse proxy and application containers.
+- **GitHub Container Registry (GHCR)**: Stores pre-built Docker images (`ghcr.io/devanshtyagi04/terraform-drift-detector`).
+- **Nginx Reverse Proxy**: Listens on port 80/443, handles SSL termination, and proxies to the application container on port 8080.
+- **DuckDNS**: Provides dynamic DNS resolution (`terraformdriftdevansh.duckdns.org`).
+- **Let's Encrypt**: Issues SSL certificates via Certbot.
+- **HTTPS Redirection**: Nginx automatically redirects HTTP traffic (port 80) to HTTPS (port 443).
 
-```
-                    Internet Traffic (HTTP Port 80 / 443)
-                                      ↓
-                 ┌────────────────────────────────────────┐
-                 │       Nginx Proxy (Docker Container)   │
-                 └───────────────────┬────────────────────┘
-                                     │
-                       Internal Bridge Network
-                                     │
-                 ┌───────────────────▼────────────────────┐
-                 │  drift-detector App (Docker Container) │
-                 └────────────────────────────────────────┘
-```
+### Deployment Commands
 
-### Steps for Deployment
-
-#### 1. Setup Docker Container Registry (GHCR) Image
-Instead of building images on your server, pull the pre-built target package from GitHub Container Registry:
 ```bash
+# Pull the production Docker image from GHCR
 docker pull ghcr.io/devanshtyagi04/terraform-drift-detector:latest
-```
 
-#### 2. Run with Docker Compose Production
-Deploy the preconfigured production stack containing both the isolated app container and the Nginx reverse proxy:
-```bash
-# Navigate to deployment directory
+# Start production services from the deploy directory
 cd deploy
-
-# Start services
 docker compose -f docker-compose.prod.yml up -d
 ```
-
-#### 3. Configuration with DuckDNS and Let's Encrypt SSL
-To expose the dashboard securely with SSL:
-1.  **DuckDNS Configuration**: Map your EC2 public IP to a free DuckDNS subdomain (e.g. `my-drift.duckdns.org`).
-2.  **SSL via Certbot**: 
-    Install Certbot on your EC2 host and generate Let's Encrypt certificates:
-    ```bash
-    sudo certbot certonly --standalone -d my-drift.duckdns.org
-    ```
-3.  **Mount Certificate**: Update `deploy/docker-compose.prod.yml` to mount the certificate files and bind Nginx to port `443`. Update the Nginx configurations to enforce secure HTTPS redirection.
 
 ---
 
 ## 🔧 Configuration
 
-### 1. File Configuration (`driftctl.yaml`)
-Global default properties are stored inside `configs/driftctl.yaml`.
+### `configs/driftctl.yaml`
 ```yaml
-database: driftctl.db        # Location of the SQLite storage
+database: driftctl.db
 api:
-  addr: ":8080"              # Server listen port
-  api_key: "change-in-prod"  # Restricts API access
+  addr: ":8080"
+  # api_key: "your-api-key"
 ```
 
-### 2. Environment Variables
+### Environment Variables
 
-| Variable | Description |
+| Variable | Purpose |
 | :--- | :--- |
-| `DRIFTCTL_DB_PATH` | Overrides the default SQLite database path (e.g., `/data/driftctl.db`). |
-| `AWS_ACCESS_KEY_ID` | Standard AWS credentials key (automatically read on local hosts). |
-| `AWS_SECRET_ACCESS_KEY` | Standard AWS credentials secret. |
-| `AWS_REGION` / `AWS_DEFAULT_REGION` | Target AWS scanning region. |
+| `DRIFTCTL_DB_PATH` | Path to the SQLite database file (e.g., `/data/driftctl.db`). |
+| `AWS_ACCESS_KEY_ID` | AWS access key credential. |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret access key credential. |
+| `AWS_SESSION_TOKEN` | AWS session token (for temporary credentials). |
+| `AWS_DEFAULT_REGION` / `AWS_REGION` | Target AWS scanning region. |
 
 ---
 
-## 🔒 Security
+## 🔐 Security
 
-*   **Non-Root Isolation**: The production Dockerfile compiles binaries statically (`CGO_ENABLED=0`) and runs the Alpine execution layer as an unprivileged, isolated user: `driftctl`.
-*   **Permissions Minimization**: The AWS provisioning Terraform module (`deploy/terraform/`) enforces least privilege policies. It attaches a read-only role (`TerraformDriftDetectorRole`) restricting actions to VPC, Subnet, EC2, and S3 inventory APIs.
-*   **Security Headers**: Nginx is configured to inject security protection headers:
-    *   `X-Frame-Options: SAMEORIGIN`
-    *   `X-Content-Type-Options: nosniff`
-    *   `Referrer-Policy: no-referrer-when-downgrade`
-    *   `Content-Security-Policy`
+- **Unprivileged Container Execution**: The Docker container runs as a non-root `driftctl` user.
+- **Least-Privilege IAM Role**: The AWS Terraform module (`deploy/terraform/`) provisions an IAM role (`TerraformDriftDetectorRole`) restricted to read-only `Describe*` and `List*` operations.
+- **HTTP Security Headers**: Nginx injects `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer-when-downgrade`, and `Content-Security-Policy`.
+- **API Key Authorization**: Optional `X-API-Key` or `Authorization: Bearer` middleware enforcement for REST endpoints.
 
 ---
 
 ## ⚠️ Limitations
 
-*   **AWS Resource Coverage**: Only audits VPCs, Subnets, EC2 Instances, S3 Buckets, and Security Groups. Other resource types in your state files are ignored.
-*   **No PUT Workspace API**: The REST API does not support workspace updates (`PUT /api/v1/workspaces/{id}`). Users must delete and recreate workspaces to edit settings.
+- **AWS Resource Support**: Currently supports EC2 Instances, S3 Buckets, Subnets, VPCs, and Security Groups. Other resource types present in state files are ignored during cloud inventory fetches.
+- **Workspace Editing**: The REST API does not currently expose a `PUT /api/v1/workspaces/{id}` endpoint. Workspaces must be deleted and recreated to change parameters.
 
 ---
 
-## 🔮 Future Improvements (Not Yet Implemented)
+## 🔮 Future Improvements
 
-The following areas are identified as future improvements for the project:
-*   [ ] **CI/CD EC2 Automatic Deployment**: GitHub Actions pipeline to automatically deploy Docker containers to AWS EC2 on main pushes.
-*   [ ] **User Authentication & RBAC**: Integration with OAuth2/OIDC providers (e.g. Keycloak, Auth0) to manage user logins and permissions.
-*   [ ] **Multi-Cloud Integrations**: Support for Microsoft Azure and Google Cloud Platform (GCP) resources.
-*   [ ] **PostgreSQL Migration**: Support database backends other than SQLite to handle large numbers of scans.
-*   [ ] **Real-time Notifications**: Trigger webhooks to alert Slack channels or Microsoft Teams when drift is detected.
-*   [ ] **Prometheus/Grafana Dashboard**: Expose `/metrics` for scraping scan results and graphing drift counts.
-*   [ ] **Cost Estimation Mappings**: Integration with tools like Infracost to estimate the cost of drifted resources.
-*   [ ] **Historical Drift Analytics**: Visualizing drift metrics over time to identify frequent manual changes.
+The following features are planned for future releases:
+- [ ] **Automated EC2 Deployment**: GitHub Actions workflow to auto-deploy updated images to EC2 on `main` branch pushes.
+- [ ] **Authentication & RBAC**: User login management with OIDC/OAuth2 providers.
+- [ ] **Multi-Cloud Support**: Resource auditing for Azure and GCP.
+- [ ] **PostgreSQL Migration**: Support for external PostgreSQL databases for large-scale scan storage.
+- [ ] **Scheduled Background Scans**: Native background worker execution for registered cron schedules.
+- [ ] **Notifications**: Webhook integration for Slack, Microsoft Teams, and email alerts when drift occurs.
+- [ ] **Prometheus Metrics**: `/metrics` endpoint for Grafana visual dashboards.
+- [ ] **Cost Estimation**: Integration with Infracost to calculate monetary impact of drifted resources.
+- [ ] **Historical Analytics**: Long-term trend analysis of drift frequency per environment.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these steps to contribute:
-1.  Fork the Repository.
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the Branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
+Contributions are welcome. Please follow these steps:
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/your-feature`).
+3. Commit your changes (`git commit -m 'Add your feature'`).
+4. Push to the branch (`git push origin feature/your-feature`).
+5. Open a Pull Request.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 💖 Acknowledgements
 
-*   [Terraform](https://github.com/hashicorp/terraform) for providing standard state schemas.
-*   The pure-Go SQLite team for [modernc.org/sqlite](https://modernc.org/sqlite).
-*   The [Vite](https://vitejs.dev/) and [React](https://react.dev/) teams.
+- [HashiCorp Terraform](https://github.com/hashicorp/terraform)
+- [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2)
+- [pure-Go SQLite driver (`modernc.org/sqlite`)](https://modernc.org/sqlite)
