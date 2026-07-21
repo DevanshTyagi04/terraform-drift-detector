@@ -20,6 +20,29 @@ The live instance is deployed on an AWS EC2 instance using Docker Compose and an
 
 ---
 
+## 🎥 Demo
+
+### Quick Demo
+
+> Upload a Terraform state file, scan your AWS infrastructure, and detect configuration drift in seconds.
+
+![Terraform Drift Detector Demo](./screenshots/demo.gif)
+
+### Full Walkthrough
+
+A complete walkthrough demonstrating:
+
+- Creating a workspace
+- Uploading a Terraform state file
+- Running a drift scan
+- Viewing scan results
+- Introducing infrastructure drift in AWS
+- Detecting and inspecting the resulting drift
+
+📺 **Watch the full demo:** https://YOUR_VIDEO_LINK
+
+---
+
 ## 🎯 Why I Built This
 
 I built this project to gain a deep technical understanding of infrastructure drift management by constructing a complete drift detection engine from scratch.
@@ -164,23 +187,23 @@ graph TD
 ## 🖼️ Screenshots
 
 #### 1. Dashboard Overview
-![Dashboard Overview](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/dashboard_placeholder.png)
+![Dashboard Overview](./screenshots/dashboard.png)
 *Workspace summary metrics, recent scan history, and status breakdown.*
 
 #### 2. Workspace Creation
-![Workspace Creation](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/workspace_creation_placeholder.png)
-*Configuration portal for target regions and ignore tag filters.*
+![Workspace Creation](./screenshots/workspaces.png)
+*All the workspaces.*
 
 #### 3. State File Upload
-![State Upload](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/state_upload_placeholder.png)
+![State Upload](./screenshots/state-upload.png)
 *Drag-and-drop state file uploader with JSON validation.*
 
 #### 4. Drift Results
-![Drift Results](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/drift_results_placeholder.png)
+![Drift Results](./screenshots/drfit-results.png)
 *Side-by-side comparative diff of expected Terraform attributes vs. actual AWS configurations.*
 
 #### 5. Scan History
-![Scan History](https://raw.githubusercontent.com/DevanshTyagi04/terraform-drift-detector/main/docs/screenshots/scan_history_placeholder.png)
+![Scan History](./screenshots/scan-history.png)
 *Historical execution log and unmanaged resource tracking.*
 
 ---
@@ -294,7 +317,7 @@ The production deployment uses the following stack:
 
 ```bash
 # Pull the production Docker image from GHCR
-docker pull ghcr.io/devanshtyagi04/terraform-drift-detector:latest
+docker pull ghcr.io/devanshtyagi04/terraform-drift-detector:edge
 
 # Start production services from the deploy directory
 cd deploy
