@@ -53,9 +53,7 @@ func fetchBuckets(ctx context.Context, client *s3.Client, region string, expecte
 		}
 
 		attrs := map[string]any{
-			"acl":           nil,
-			"force_destroy": nil,
-			"versioning":    nil,
+			"acl": nil,
 		}
 
 		verOut, err := client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{
@@ -68,7 +66,9 @@ func fetchBuckets(ctx context.Context, client *s3.Client, region string, expecte
 			}
 		}
 
-		resources = append(resources, baseResource("aws_s3_bucket", bucket, bucket, bucketRegion, attrs, tags))
+		normalizedAttrs := NormalizeS3BucketAttributes(attrs)
+
+		resources = append(resources, baseResource("aws_s3_bucket", bucket, bucket, bucketRegion, normalizedAttrs, tags))
 	}
 	return resources, errs
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/driftctl/driftctl/internal/model"
+	"github.com/driftctl/driftctl/internal/providers/aws"
 )
 
 type tfState struct {
@@ -202,6 +203,9 @@ func normalizeAttributes(resType string, attrs map[string]any) map[string]any {
 			out[key] = normalizeValue(v)
 		}
 	}
+	if resType == "aws_s3_bucket" {
+		return aws.NormalizeS3BucketAttributes(out)
+	}
 	return out
 }
 
@@ -210,7 +214,7 @@ func compareKeysForType(resType string) []string {
 	case "aws_instance":
 		return []string{"instance_type", "ami", "vpc_security_group_ids", "subnet_id", "monitoring"}
 	case "aws_s3_bucket":
-		return []string{"acl", "force_destroy", "versioning"}
+		return []string{"acl", "versioning"}
 	case "aws_security_group":
 		return []string{"description", "vpc_id", "ingress", "egress"}
 	case "aws_vpc":
