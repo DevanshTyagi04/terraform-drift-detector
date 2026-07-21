@@ -39,7 +39,7 @@ A complete walkthrough demonstrating:
 - Introducing infrastructure drift in AWS
 - Detecting and inspecting the resulting drift
 
-📺 **Watch the full demo:** https://YOUR_VIDEO_LINK
+📺 **Watch the full demo:** https://youtu.be/C5y9Ur2Y8zM
 
 ---
 
