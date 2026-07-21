@@ -26,7 +26,7 @@ The live instance is deployed on an AWS EC2 instance using Docker Compose and an
 
 > Upload a Terraform state file, scan your AWS infrastructure, and detect configuration drift in seconds.
 
-![Terraform Drift Detector Demo](./screenshots/demo.gif)
+![Terraform Drift Detector Demo](./screenshots/demo.mp4)
 
 ### Full Walkthrough
 
