@@ -6,7 +6,7 @@
 ![AWS](https://img.shields.io/badge/AWS-SDK_v2-232F3E?style=flat&logo=amazon-aws)
 ![Terraform](https://img.shields.io/badge/Terraform-State_Parser-844FBA?style=flat&logo=terraform)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=flat&logo=github-actions)
-![License](https://img.shields.io/badge/License-MIT-green.style=flat)
+
 
 A web application and CLI tool that detects configuration drift between Terraform state files and live AWS cloud resources. It extracts managed resources from state files, inventories active cloud resources using AWS SDK paginators, normalizes complex attributes, and highlights resource mismatches in a web dashboard and command-line interface.
 
